@@ -1,7 +1,640 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-1 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>  
+    div.padded {  
+      padding-top: 0px;  
+      padding-right: 100px;  
+      padding-bottom: 0.25in;  
+      padding-left: 100px;  
+    }
+    span {
+        display: none;
+    }
+    a.toc {
+        font-family: sans-serif;
+        font-weight: bold;
+        text-align: center;
+        font-size: 120%;
+        color: black;
+    }
+    /* style mostly from Stack Overflow's noscript warning */
+    #noscript-warning {
+        font-family: sans-serif;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        z-index: 5051;
+        text-align: center;
+        font-weight: bold;
+        font-size: 120%;
+        color: hsl(0,0%,100%);
+        background-color: hsl(358deg 62% 47%);
+        padding: 5px 0;
+    }
+    #toctable {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        z-index: 5050;
+        text-align: center;
+        font-weight: bold;
+        font-size: 120%;
+        background-color: white;
+    }
+    /* Table styles from first response on https://stackoverflow.com/questions/24526167/how-to-make-a-simple-html-table-to-look-like-handsontable */
+    table{
+        width:100%;
+        margin-bottom:1em;
+        border-collapse: collapse;
+    }
+    th{
+        font-weight:bold;
+        background-color:#ddd;
+    }
+    th,
+    td{
+        padding:0.5em;
+        border:1px solid #ccc;
+        text-align: center;
+    }
+  </style> 
+<title>Maybe I'll be PathTracer  |  CS 184</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="style.css" media="screen" />
+<script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      },
+      svg: {
+        fontCache: 'global'
+      }
+    };
+</script>
+<script type="text/javascript" id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+</script>
+</head>
+<body>
+<noscript>
+    <div id="noscript-warning">
+        Please enable JavaScript; the page will look better!
+    </div>
+</noscript>
+<br />
+<h1 align="middle">Assignment 3: PathTracer</h1>
+    <h2 align="middle">Alek Kozminski, Vincent Chiang</h2>
+
+    <div class="padded">
+        <p>In this assignment, we implemented functionality to render realistic-looking images from just knowing the location of objects and light sources. We did this by tracing rays from pixels in the prospective image to sampled points in the scenes, with the option to either sample with the uniform hemisphere method or the light importance method. We implemented BVH acceleration and adaptive sampling to greatly increase the speed of rendering, and implemented the ability for rays to bounce multiple times.</p>
+
+        <p>We split up this assignment and did our parts mostly separately, with each person checking the other's tasks after they were done. This went fine, as we taught each other the parts that we did not understand that we read in each other's code, and caught each other's bugs.</p>
+
+        <table id="toctable">
+            <tr>
+                <td><a href="#p1" class="toc">Part 1</a></td>
+                <td><a href="#p2" class="toc">Part 2</a></td>
+                <td><a href="#p3" class="toc">Part 3</a></td>
+                <td><a href="#p4" class="toc">Part 4</a></td>
+                <td><a href="#p5" class="toc">Part 5</a></td>
+            </tr>
+        </table>
+
+    <h2 align="middle" id="p1"><br><br>1: Ray Generation and Intersection</h2>
+        <p>In order to generate a ray, we must first transform the point in image space that the ray will pass through into a point in world-space, where the camera is the origin of the ray. We do this in part 1.1 by first computing the coordinates of the top right corner of the image in camera space to be 
+        <span>
+            $(x_{top-right}, y_{top-right}, z) = (\tan(0.5 * hFov), \tan(0.5 * vFov), -1)$
+        </span>
+        <noscript>(tan(0.5 * hFov, tan(0.5 * vFov, -1)</noscript>
+        using the formula given in the project spec (with tangent being taken of radian values, of course). We then compute the desired point in camera space to be 
+        <span>
+            $(x_{camera}, y_{camera}, z) = (2 * x_{image} * x_{top-right} - x_{top-right}, 2 * y_{image} * y_{top-right} - y_{top-right}, z)$
+        </span>
+        <noscript>
+            (camera-x, camera-y, z) = (2 * image-x * top-right-x - top-right-x, 2 * image-y * top-right-y - top-right-y, z)
+        </noscript>. Finally, we convert the camera-space point to world-space by multiplying it by the camera-to-world rotation matrix. <br><br> We then create a ray in world-space by normalizing the point, and initializing a Ray object with parameters of the camera's position and the newly computed point. We set the ray's min_t and max_t properties to be the camera's nClip and fClip properties, respectively.</p>
+
+        <p>Now that we have a method to generate a ray, we can start our rendering pipeline! For all pixels in the prospective image:</p>
+        <ol>
+            <li> Take num_samples (given by the desired sampling rate) samples from the prospective image. For each sample:
+                <ol type="a">
+                    <li>Using our earlier-outlined ray generation method, generate a ray from our observation perspective (the location of our camera) to the normalized <span>$(x_{pixel} + x_{sample}, y_{pixel} + y_{sample})$</span><noscript>(x_pixel + x_sample, y_pixel + y_sample)</noscript> point.</li>
+                    <li>Estimate and record the global illumination of the given ray.</li>
+                </ol>
+            </li>
+            <li> Average all estimated global illuminations.</li>
+            <li> Set the color of the pixel at to be the average estimated global illumination.</li>
+            <li> Record that we took num_samples samples for the pixel by setting its value in the sampleCountBuffer.</li>
+        </ol>
+        <p> Once we have set the colors of all pixels in the image, we can output the image.</p>
+        <p>When estimating global illumination of a given ray, we have to check what it intersects with. For checking for intersections with triangles specifically, we implement the Möller-Trumbore intersection algorithm. Given a triange T with vertices <span>$v_1$, $v_2$, and $v_3$</span><noscript>v1, v2, and v3</noscript> and ray R with origin <span>$o$</span><noscript>o</noscript> and destination <span>$d$</span><noscript>d</noscript>, the Möller-Trumbore intersection algorithm is as follows:</p>
+        <ol>
+            <li> Create vectors <span>$edge_1$, $edge_2$, and $s$</span><noscript>edge1, edge2, and s</noscript> as the vectors from the first vertex of the T to the second vertex of T, the first vertex of the T to the third vertex of T, and the first vertex of the T to the origin of R, respectively. <span>($edge_1 = v_2 - v_1$, $edge_2 = v_3 - v_1$, $s = o - v_1$)</span></li>
+            <li> Compute vectors <span>$s_1$ and $s_2$</span><noscript>s1 and s2</noscript> as the cross products of <span>$o$ and $edge_2$</span><noscript>o and edge2</noscript>, and <span>$s$ and $edge_1$</span><noscript>s and edge1</noscript>, respectively. <span>($s_1 = o \times edge_2$, $s_2 = s \times edge_1$)</span></li>
+            <li>Create variables <span>$t = \frac{s_2 \cdot edge_2}{s_1 \cdot edge_1}, b_1 = \frac{s_1 \cdot s}{s_1 \cdot edge_1}, b_2 = \frac{s_2 \cdot d}{s_1 \cdot edge_1}$</span><noscript>t = (s2 dot edge2)/(s1 dot e1), b1 = (s1 dot s)/(s1 dot e1), b2 = (s2 dot d)/(s1 dot e1)</noscript>. If any of the following are true, there is no intersection:
+                <ul>
+                    <li><span>$t &lt; R_{t_{min}}$</span><noscript>t &lt; R.min_t</noscript></li>
+                    <li><span>$t &gt; R_{t_{max}}$</span><noscript>t &gt; R.max_t</noscript></li>
+                    <li><span>$b_1 &lt; 0$</span><noscript>b1 &lt; 0</noscript></li>
+                    <li><span>$b_2 &lt; 0$</span><noscript>b2 &lt; 0</noscript></li>
+                    <li><span>$b_1 + b_2 &gt; 1$</span><noscript>b1 + b2 &gt; 0</noscript></li>
+                </ul>
+            </li>
+            <li> Otherwise, there is an intersection. R will not be able to intersect with anything behind the current object, so we set <span>$R_{t_{max}} = t$</span><noscript>R.max_t = t</noscript>, and set the current intersecting object to T with the location set to <span>$t$</span><noscript>t</noscript>.</li>
+        </ol>
+
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBbunny_normal.png" width="480px" />
+                        <figcaption align="middle">CBbunny normal shading</figcaption>
+                    </td>
+
+                    <td align="middle">
+                        <img src="images/CBspheres_normal.png" width="480px" />
+                        <figcaption align="middle">CBspheres normal shading</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBgems_normal.png" width="480px" />
+                        <figcaption align="middle">CBgems normal shading</figcaption>
+                    </td>
+
+                    <td align="middle">
+                        <img src="images/CBcoil_normal.png" width="480px" />
+                        <figcaption align="middle">CBcoil normal shading</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+    <h2 align="middle" id="p2"><br><br>Part 2: Bounding Volume Hierarchy</h2>
+        <p>When constructing a BVH, we take in parameters for the start of an iterator of primitives in the entire scene, the end of said iterator, and the max_leaf_size (the maximum number of primitives in one BVH node). Our BVH construction algorithm, contained in the construct_bvh method, is as follows:</p>
+        <ol>
+            <li>We first initialize two bounding boxes, bbox (to bound all primitives encompassed by the node) and cenBox (to bound the centroids of all primitives' bounding boxes encompassed by the node).</li>
+            <li>For all primitives in the range from start to end (inclusive), we:
+                <ol type="a">
+                    <li>Get the primitive's bounding box, bb</li>
+                    <li>Expand bbox to include bb</li>
+                    <li>Expand cenBox to include the centroid of bb</li>
+                    <li>Increment a count variable that is keeping track of the number of primitives in the node</li>
+                </ol>
+            </li>
+            <li>Then, we create a new BVHnode.</li>
+            <li>In the case in which the number of primitives in the node is less than or equal to the max_leaf_size, then the node can be a leaf node. We simply set the start and end of the new node to the start and end that we passed into the function, and return the node.</li>
+            <li>Otherwise, if the number of primitives in the node is greater than the max_leaf_size, we must split the primitives between child nodes. Our partitioning logic is the following:
+                <ol type="a">
+                    <li> To find the splitting axis that would give us the greatest benefit, we find the largest axis of the bbox.</li>
+                    <li>We find the center of the centroid of the cenBox along this axis.</li>
+                    <li>We partition the primitives based on whether their bounding box's centroid is less than the previously found center of the centroid of the cenBox along the previously found axis.</li>
+                    <li>In the edge case in which all the primitives are on the same side of the partition, we are not able to split, and this node becomes a leaf node anyway—we set the start and end of the node to the start and end that we passed into the function, and return the node.</li>
+                </ol>
+            </li>
+            <li>The left child of the node is set to the BVHnode containing the first group of the partition, while the right child is set to the BVHnode containing the second group (both nodes created by a recursive call to construct_bvh).</li>
+            <li>Finally, we return the node.</li>
+        </ol>
+        <h4 align="middle">Large Images</h4>
+            <p>The following images are too large to create in reasonable time without BVH acceleration:</p>
+            <div align="center">
+                <table style="width:100%">
+                    <tr>
+                        <td align="middle">
+                            <img src="images/wall-e_normal.png" width="480px" />
+                            <figcaption align="middle">Wall-e normal shading</figcaption>
+                        </td>
+
+                        <td align="middle">
+                            <img src="images/CBlucy_normal.png" width="480px" />
+                            <figcaption align="middle">CBlucy normal shading</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                            <img src="images/blob_normal.png" width="480px" />
+                            <figcaption align="middle">blob normal shading</figcaption>
+                        </td>
+
+                        <td align="middle">
+                            <img src="images/dragon_normal.png" width="480px" />
+                            <figcaption align="middle">Dragon normal shading</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        <h4 align="middle">Rendering Times</h4>
+        <table>
+            <thead>
+                <tr>
+                    <td>Scene</td>
+                    <td>Rendering Time (s)<br/>(without BVH acceleration)</td>
+                    <td>Rendering Time (s)<br/>(with BVH acceleration)</td>  
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Maxplanck</td>
+                    <td>284.9589s</td>
+                    <td>0.1353s</td>
+                </tr>
+                <tr>
+                    <td>Peter</td>
+                    <td>226.1683s</td>
+                    <td>0.1393s</td>
+                </tr>
+                <tr>
+                    <td>CBbunny</td>
+                    <td>164.7074s</td>
+                    <td>0.1310s</td>
+                </tr>
+            </tbody>
+        </table>
+        <p>As you can see from the above results, BVH <i>significantly</i> improves the rendering times of our scenes. The scenes we compared were a whole two orders of magnitude faster! (The scenes we used are shown in the part 1 section.)</p>
+
+    <h2 align="middle" id="p3"><br><br>Part 3: Direct Illumination</h2>
+        <p>The first implementation of the direct lighting function, contained in the method estimate_direct_lighting_hemisphere, is done by uniform hemisphere sampling of all rays from the starting point:</p>
+        <ol>
+            <li>We are given a ray R (with origin <span>$o$</span><noscript>o</noscript> and destination <span>$d$</span><noscript>d</noscript>) and an intersect I. From these, and a coordinate transform matrix <span>$w2o$</span><noscript>w2o</noscript> that we calculated, we can calculate the point that the ray hits (<span>$hit\_point = o + d * I_t$</span><noscript>hit_point = o + d * I.t</noscript>), as well as the direction that the ray points,  <span>$w_{out} = w2o * -d$</span><noscript>w_out = w2o * -d</noscript>.</li>
+            <li>We set num_samples to be the number of light sources in the scene times the number of samples per area light source. We initialize a vector for the outgoing radiance, <span>$L_{out}$.</span><noscript>L_out.</noscript> Then, num_samples times, we:
+                <ol type="a">
+                    <li>Take a sample <span>$w_{in}$</span><noscript>w_in</noscript> from the hemisphere at the current point and convert it to the world coordinates using <span>$w2o$</span><noscript>w2o</noscript><!-- (<span>$w_{in\_world} = w2o * w_{in}$</span><noscript>w_in_world = w2o * w_in</noscript>)-->.</li>
+                    <li>Create a new ray <span>$R_{new}$ with origin $hit\_point$</span><noscript>R_new with origin hit_point</noscript> and the converted new sample as the destination. For numerical stability, we set the minimum t value of the new ray to ε (a very small value, equivalent to 0.00001 in this context).</li>
+                    <li>If the new ray intersects the BVH, we store the intersection (<span>$I_{new}$</span><noscript>I_new</noscript>), and then add the radiance of the intersection to <span>$L_{out}$</span><noscript>L_out</noscript> (<span>$L_{out} {\mathrel{+}=} bsdf\_reflection_{I_{new}}(w_{out}, w_{in})* bsdf\_emission_{I_{new}} * \cos{w_{in}}$</span><noscript>L_out += bsdf_reflection_I_new(w_out, w_in) * bsdf_emission_I_new * cos(w_in)</noscript>).</li>
+                </ol>
+            </li>
+            <li>Finally, we return the solid angle of the hemisphere multiplied by the average outgoing radiance across all samples: <span>$2\pi * \frac{L_{out}}{num\_samples}$.</span><noscript>2 * pi * L_out / num_samples.</noscript></li>
+        </ol>
+        <p>The second implementation of the direct lighting function, contained in the method estimate_direct_lighting_importance, is done by importance sampling only the rays towards the light sources:</p>
+        <ol>
+            <li>We are given a ray R (with origin <span>$o$</span><noscript>o</noscript> and destination <span>$d$</span><noscript>d</noscript>) and an intersect I. From these, and a coordinate transform matrix <span>$w2o$</span><noscript>w2o</noscript> that we calculated, we can calculate the point that the ray hits (<span>$hit\_point = o + d * I_t$</span><noscript>hit_point = o + d * I.t</noscript>), as well as the direction that the ray points,  <span>$w_{out} = w2o * -d$</span><noscript>w_out = w2o * -d</noscript>. Additonally, we initialize a vector for the outgoing radiance, <span>$L_{out}$.</span><noscript>L_out.</noscript></li>
+            <li>Then, for all light sources in the scene:
+                <ol type="a">
+                    <li>If the light is a delta light, we will be taking one sample. Otherwise, we will be taking the number of samples given by the scene's number of samples per area light source value.</li>
+                    <li>We initialize a vector <span>$L_{out_{part}}$.</span><noscript>L_out_part.</noscript></li>
+                    <li>Then, for the appropriate number of times, we:
+                        <ol type="i">
+                            <li>Find the radiance at the hit_point by sampling the light, also storing the distance from the hit_point to the light, the direction of the incoming radiance at the hit_point in world coordinates, and the pdf (denoted as <span>$radiance$, $distToLight$, $w_{in\_world}$, and $pdf$</span><noscript>radiance, distToLight, w_in_world, and pdf</noscript>, respectively).</li>
+                            <li>Using the o2w matrix to change to object space, we find the incoming radiance at the hit_point in world coordinates to be <span>$o2w * w_{in\_world}$</span><noscript>o2w * w_in_world</noscript>. </li>
+
+                            <li>If the z-coordinate of <span>$w_{in}$</span><noscript>w_in</noscript> is greater than 0 (it points from the light source towards the hit_point), then the light source may be able to contribute towards the radiance of the point. We can then create a new ray <span>$R_{new}$ with origin $hit\_point$ and destination $w_{in\_world}$</span><noscript>R_new with origin hit_point and destination w_in_world</noscript>. For numerical stability, we set the minimum t value of the new ray to ε (a very small value, equivalent to 0.00001 in this context), and its maximum t value to distToLight - ε (to make sure that there is nothing between the hit_point and the light, so that we know that the light hits the hit_point).</li>
+
+                            <li>We then check whether <span>$R_{new}$</span><noscript>R_new</noscript> intersects the BVH. If it doesn't, then we add the product of the reflectance of the bsdf of I for <span>$w_{in}$ and $w_{out}$, the $radiance$, and $\cos{w_{in}}$ divided by the $pdf$, to </span><span>$L_{out_{part}}$.</span><noscript>w_in and w_out, the radiance, and cos(w_in) divided by the pdf, to L_out_part.</noscript></li>
+                        </ol>
+                    </li>
+                    <li>Finally, we add the average radiance contributed by the light source (<span>$\frac{L_{out_{part}}}{num\_samples}$</span><noscript>L_out_part/num_samples</noscript> ) to <span>$L_{out}$.</span><noscript>L_out.</noscript> If this was the last light source, we have then calculated the outgoing luminance and can return <span>$L_{out}$.</span><noscript>L_out.</noscript></li>
+                </ol>
+            </li>
+        </ol>
+        <h4 align="middle">Hemisphere vs Importance sampling</h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                    <img src="images/bench_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/bench.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                    <img src="images/bench_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/bench.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/blob_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/blob.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                    <img src="images/blob_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/blob.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/bunny_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/bunny.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/bunny_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/bunny.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBbunny_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/CBbunny.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBbunny_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBbunny.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBempty_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/CBempty.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBempty_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBempty.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_lambertian_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/CBspheres_lambertian.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBspheres_lambertian_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBspheres_lambertian.dae, importance</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/dragon_p3_s1_l4_m1_hemisphere.png" width="480px" />
+                    <figcaption align="middle">/dae/sky/dragon.dae, hemisphere</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/dragon_p3_s1_l4_m1_nonhemisphere.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/dragon.dae, importance</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>From the above images, we can see the differences in uniform hemisphere and (importance) light sampling. In the cases with an area light and the room, the importance-sampled images look much more solid. The colors are also much more distinct in the importance-sampled images than the hemisphere-sampled images—you can barely make out the colors of the walls in the hemisphere-sampled images, but the blue and red walls are clearly the correct colors in the importance-sampled images. However, the hemisphere-sampled images are better able to capture the white color of the ceiling (although neither do it well). The hemisphere-sampled images look like semi-random noise with distinct shapes, while the importance-sampled images actually look like the scenes they represent, with a small amount of noise.
+        <br>
+        In the cases with the pedestal and no area light, the light source is a point light not visible in the image. For these cases, the importance-sampled images are able to capture much of the scene, just looking a bit noisy. However, the hemisphere-sampled images have very low chances of sampling the light source, so almost none of the pixels are lit up, and the images just look like darkness.
+        </p>
+
+        <h4 align="middle">Noise Level in Soft Shadows at Different Numbers of Light Rays</h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_lambertian_p3_s1_l1_m1.png" width="480px" />
+                    <figcaption align="middle">l = 1</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_lambertian_p3_s1_l4_m1.png" width="480px" />
+                    <figcaption align="middle">l = 4</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_lambertian_p3_s1_l16_m1.png" width="480px" />
+                    <figcaption align="middle">l = 16</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBspheres_lambertian_p3_s1_l64_m1.png" width="480px" />
+                    <figcaption align="middle">l = 64</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>As we increase the number of light rays that we are rendering with, the images get less noisy, with boundaries becoming more clearly defined. We notice this because the noise around the soft shadows decreases, becoming a more continuous gradient from dark to light.</p>
+
+    <h2 align="middle" id="p4"><br><br>Part 4: Global Illumination</h2>
+        <p>Our indirect lighting function (at_least_one_bounce_radiance) is implemented as follows:</p>
+        <ol>
+            <li>We are given a ray R (with origin <span>$o$</span><noscript>o</noscript> and destination <span>$d$</span><noscript>d</noscript>) and an intersect I. From these, and a coordinate transform matrix <span>$w2o$</span><noscript>w2o</noscript> that we calculated, we can calculate the point that the ray hits (<span>$hit\_point = o + d * I_t$</span><noscript>hit_point = o + d * I.t</noscript>), as well as the direction that the ray points,  <span>$w_{out} = w2o * -d$</span><noscript>w_out = w2o * -d</noscript>. Additonally, we initialize a vector for the outgoing radiance, <span>$L_{out}$.</span><noscript>L_out.</noscript></li>
+            <li>We add the one_bounce_radiance from R and I to L_out.</li>
+            <li>We then check several conditions to decide whether we will terminate the algorithm here. If so, we just return <span>$L_{out}$.</span><noscript>L_out.</noscript></li>
+            <li>Otherwise, if we are not terminating, we next find the radiance at the <span>$hit\_point$</span><noscript>hit_point</noscript> by evaluating I's bsdf at that point, also storing the incident light direction and pdf as <span>$w_{in}$</span><noscript>w_in</noscript> and pdf, respectively, in the process.</li>
+            <li>We can then convert <span>$w_{in}$</span><noscript>w_in</noscript> to world coordinates (<span>$w_{in\_world}$</span><noscript>w_in_world)</noscript>) using <span>$w2o$</span><noscript>w2o</noscript><!-- (<span>$w_{in\_world} = w2o * w_{in}$</span><noscript>w_in_world = w2o * w_in</noscript>)-->.</li>
+            <li>We can then create a new ray <span>$R_{new}$ with origin $hit\_point$ and destination $w_{in\_world}$</span><noscript>R_new with origin hit_point and destination w_in_world</noscript>. For numerical stability, we set the minimum t value of the new ray to ε (a very small value, equivalent to 0.00001 in this context). Additionally, we set the depth of <span>$R_{new}$</span><noscript>R_new</noscript> to one smaller than the depth of R.</li>
+            <!-- thanks to https://math-linux.com/latex-26/faq/latex-faq/article/latex-piecewise-function for showing how to do a piecewise function-->
+            <li>We check whether <span>$R_{new}$</span><noscript>R_new</noscript> intersects with the BVH, storing the intersection in <span>$I_{new}$</span><noscript>I_new</noscript>. Then, we adjust <span>$L_{out}$</span><noscript>L_out</noscript> according to the following: <span>$$ \begin{equation*} L_{out}{\mathrel{+}=}\begin{cases} at\_least\_one\_bounce\_radiance(R_{new}, I_{new}) * \frac{radiance * \cos{w_{in}}}{pdf} \quad &\text{if} \, R_{new} \, \text{intersects the BVH} \\ at\_least\_one\_bounce\_radiance(R_{new}, I_{new}) * \frac{radiance * \cos{w_{in}}}{0.7*pdf} \quad &\text{otherwise} \, \\ \end{cases} \end{equation*} $$</span><noscript><br>If R_new intersects the BVH, L_out += at_least_one_bounce_radiance(R_new, I_new) * radiance * cos(w_in)/pdf. Otherwise, L_out += at_least_one_bounce_radiance(R_new, I_new) * radiance * cos(w_in)/(0.7 * pdf)</noscript><br>(0.7 comes from using a termination probability of 0.3, and helps to un-bias the estimate)</li>
+            <li>We then return <span>$L_{out}$</span><noscript>L_out</noscript>.</li>
+        </ol>
+
+        <h4 align="middle">Images Rendered With Global Illumination</h4>
+            <div align="center">
+                <table style="width:100%">
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bench_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/bench.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/blob_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/blob.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/bunny.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/CBbunny_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBbunny.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/CBempty_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBempty.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/CBspheres_lambertian_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/CBspheres_lambertian.dae</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">/dae/sky/dragon.dae</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <p>We rendered the above suggested images from Part 4 Task 4 with Max Ray Depth 5, 1024 Samples-Per-Pixel, and 4 Light Rays.</p>
+
+        <h4 align="middle">Direct vs Indirect Illumination</h4>
+            <div align="center">
+                <table style="width:100%">
+                    <tr>
+                        <td align="middle">
+                            <img src="images/CBspheres_lambertian_p4_s1024_l4_m5_direct.png" width="480px" />
+                            <figcaption align="middle">Direct</figcaption>
+                        </td>
+                        <td align="middle">
+                            <img src="images/CBspheres_lambertian_p4_s1024_l4_m5_indirect_no0bounce.png" width="480px" />
+                            <figcaption align="middle">Indirect</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <p>As you can see from the above images, direct illumination does a good job at lighting areas directly in line-of-sight of the light source, while indirect illumination lights up the areas that are not in direct line-of-sight of the light, that look dark and dim in the direct illumination case. However, many areas in line-of-sight of the light source in the indirect illumination case are noticeably darker than in the direct illumination case. The overall ambient light of the scene looks darker in the indirect illumination case, and brighter and more concentrated in the direct illumination case.</p>
+
+        <h4 align="middle">CBunny.dae Rendered With Varying Maximum Ray Depth</h4>
+            <div align="center">
+                <table style="width:100%">
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m0.png" width="480px" />
+                        <figcaption align="middle">Max Ray Depth 0</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m1.png" width="480px" />
+                        <figcaption align="middle">Max Ray Depth 1</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m2.png" width="480px" />
+                        <figcaption align="middle">Max Ray Depth 2</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m3.png" width="480px" />
+                        <figcaption align="middle">Max Ray Depth 3</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/bunny_p4_s1024_l4_m100.png" width="480px" />
+                        <figcaption align="middle">Max Ray Depth 100</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <p>The difference in lighting in the low-depth images (especially between Max Ray Depth 0 and Max Ray Depth 1) show how important the first few bounces of light in a scene are to the image produced. The similarities between Max Ray Depth 3 and Max Ray Depth 100 show the diminishing returns in fidelity of image light once the first few light bounces have been included.</p>
+
+        <h4 align="middle"> Rendered With Varying Sample-Per-Pixel Rates</h4>
+            <div align="center">
+                <table style="width:100%">
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s1_l4_m5.png" width="480px" />
+                        <figcaption align="middle">1 Sample-Per-Pixel (My dragon is the noisiest dragon)</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s2_l4_m5.png" width="480px" />
+                        <figcaption align="middle">2 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s4_l4_m5.png" width="480px" />
+                        <figcaption align="middle">4 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s8_l4_m5.png" width="480px" />
+                        <figcaption align="middle">8 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s16_l4_m5.png" width="480px" />
+                        <figcaption align="middle">16 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s64_l4_m5.png" width="480px" />
+                        <figcaption align="middle">64 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="middle">
+                        <img src="images/dragon_p4_s1024_l4_m5.png" width="480px" />
+                        <figcaption align="middle">1024 Samples-Per-Pixel</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <p>From the above images, we can see how increasing the sample-per-pixel rate reduces noise, making images look sharper and more well-defined. We see large differences at lower sample rates, but there are diminishing returns (especially with respect to rendering time taken) as we increase the sample rate to greater numbers (16 vs 1024, for example).</p>
+
+    <h2 align="middle" id="p5"><br><br>Part 5: Adaptive Sampling</h2>
+        <p>Our implementation of adaptive sampling (contained in the raytrace_pixel function) is as follows:</p>
+        <ol>
+            <li>Initialize two doubles, <span>$s_1$ and $s_2$</span><noscript>s1 and s2</noscript>, as well as a loop variable (i) and a vector (sums) all to 0. We also create a 2D-vector containing the x and y values of the current point (origin).</li>
+            <li>num_samples times (with i as the loop variable), we:
+                <ol type="a">
+                    <li>If we are at the start of a new batch of samples (besides the first batch), we calculate the current mean and variance of the currently samples already computed: <span>$\mu = \frac{s_1}{i}$, $\sigma^2 = \frac{s_2 - \frac{s_1^2}{i}}{i - 1}$</span><noscript>μ = s_1/i, var = (s2 - ((s1^2) / i)) / (i - 1)</noscript>.</li>
+                    <li>Then, if the pixel's convergence is less than or equal to the maximum tolerance times the mean (convergence = I = <span>$1.96 * \frac{\sigma}{\sqrt{i}} \le maxTol * \mu$</span><noscript>1.96 * sqrt(var)/i ≤ maxTol * μ</noscript>), we immediately stop taking samples.</li>
+                    <li>Otherwise, we sample a point from the prospective image, then generate a ray from our observation perspective (the location of our camera) to the normalized <span>$(x_{pixel} + x_{sample}, y_{pixel} + y_{sample})$</span><noscript>(x_pixel + x_sample, y_pixel + y_sample)</noscript> point.</li>
+                    <li> Next, we estimate and record the global illumination of the given ray (by adding it to sums).</li>
+                    <li>We also update <span>$s_1$ and $s_2$</span><noscript>s1 and s2</noscript> by adding the scalar illumination value of the estimate and its square, respectively.</li>
+                </ol>
+            </li>
+            <li>Once we are done taking samples, we update the pixel's color to be sums/i, and update the sampleCountBuffer of the pixel's index to i.</li>
+        </ol>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBbunny_p5_s2048_l1_m5.png" width="480px" />
+                    <figcaption align="middle">CBbunny</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/CBbunny_p5_s2048_l1_m5_rate.png" width="480px" />
+                    <figcaption align="middle">CBbunny rate</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/wall-e_p5_s2048_l1_m5.png" width="480px" />
+                    <figcaption align="middle">Wall-e</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                    <img src="images/wall-e_p5_s2048_l1_m5_rate.png" width="480px" />
+                    <figcaption align="middle">Wall-e rate</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <p>The above images were rendered with the following configuration:</p>
+        <table>
+            <thead>
+                <tr>
+                    <td>Samples Per Pixel</td>
+                    <td>Samples Per Light</td>
+                    <td>Max Ray Depth</td>  
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>2048</td>
+                    <td>1</td>
+                    <td>5</td>
+                </tr>
+            </tbody>
+        </table>
+
+    <p>Site Link: <a href="https://cal-cs184-student.github.io/sp22-project-webpages-rasterfarians/proj3-1/index.html">https://cal-cs184-student.github.io/sp22-project-webpages-rasterfarians/proj3-1/index.html</a></p>
+
+</div>
+<script defer>
+    for (const c of document.getElementsByTagName('span')) {
+        c.style = "display: inline-block;";
+    }
+</script>
+</body>
 </html>
