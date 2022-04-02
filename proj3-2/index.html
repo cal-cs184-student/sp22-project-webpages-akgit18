@@ -1,7 +1,150 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-2 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>  
+    div.padded {  
+      padding-top: 0px;  
+      padding-right: 100px;  
+      padding-bottom: 0.25in;  
+      padding-left: 100px;  
+    }  
+  </style> 
+<title>Alek Kozminski, Vincent Chiang  |  CS 184</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="style.css" media="screen" />
+</head>
+<body>
+<br />
+<h1 align="middle">Assignment 3: PathTracer</h1>
+    <h2 align="middle">Alek Kozminski, Vincent Chiang</h2>
+
+    <div class="padded">
+        <p>In this assignment, we implemented functionality that enabled us to render objects made of reflective materials (such as gold, silver, and platinum, all shown below). We also implemented functionality that allows us to render images simulating looking at the scene through a thin lens, which is closer to how we see things with our eyes, and allows us to look at the scene from different distances and perspectives.<br>In this project, we worked together on both parts, which sped up the work and allowed us to easily spot mistakes made by the other. It went well, and we learned about the time savings that you can make by trusting other people to help when you are having difficulties finding your mistakes.</p>
+
+    <h2 align="middle">Part 2: Microfacet BRDF</h2>
+        <!-- <p>We did a whole lot of smart stuff in this part.</p> -->
+        
+        <h4 align="middle">Gold CBdragon with Varying Alpha</h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_microfacet_au_p2_s256_l4_m7_alpha0.005.png" width="480px" />
+                        <figcaption align="middle">Alpha = 0.005</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_microfacet_au_p2_s256_l4_m7_alpha0.05.png" width="480px" />
+                        <figcaption align="middle">Alpha = 0.05</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_microfacet_au_p2_s256_l4_m7_alpha0.25.png" width="480px" />
+                        <figcaption align="middle">Alpha = 0.25</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_microfacet_au_p2_s256_l4_m7_alpha0.5.png" width="480px" />
+                        <figcaption align="middle">Alpha = 0.5</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>As alpha increases, the dragon gets less shiny, and the artifact (light spots reflecting off the dragon) become less noticeable.<br>These images were rendered with s = 256, l = 4, and m = 7.</p>
+
+        <h4 align="middle">Copper CBbunny Sampled with Hemisphere and Importance Sampling</h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBbunny_microfacet_cu_p2_s64_l1_m7_hemisphere.png" width="480px" />
+                        <figcaption align="middle">Hemisphere Sampling</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBbunny_microfacet_cu_p2_s64_l1_m7_importance.png" width="480px" />
+                        <figcaption align="middle">Importance Sampling</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>The hemisphere-sampled image looks much more noisy than the importance-sampled image, and the overall scene looks darker. However, due to the increased noise, you do not really notice the artifact coming from light being reflected by the bunny, which appears as the light spots in the importance-sampled image.</p>
+
+        <h4 align="middle">Platinum CBlucy</h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBlucy_microfacet_pt_p2_s256_l4_m7_alpha0.5.png" width="480px" />
+                        <figcaption align="middle">Platinum.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>Platinum has eta = (0.46138, 0.46608, 0.58870) and k = (5.9022, 5.0942, 3.9742) (corresponding to (red, green, blue)).<br>This image was rendered with alpha = 0.5, s = 256, l = 4, and m = 7.</p>
+
+    <h2 align="middle">Part 4: Thin Lens</h2>
+        <p>In the pinhole camera model, the field of view is captured through straight rays without passing through any mediums like lenses, and meeting at a single point. In other words, the pinhole camera model simulates a view not possible by human eyes.
+        
+        <br>Meanwhile, in the thin-lens camera model, we are simulating the field of view captured by human eyes or cameras where rays pass through a thin curved lens. The lens bends the light, such that light hitting any point on the lens will be redirected from their original path, towards a focal point behind the lens. If the point observation is at the same point that all rays of light from an object (or a dx-by-dy size part of an object) focus on, the object (or part of the object) will look crisp and in focus. If the point that the rays from the object focus on is elsewhere, then the object will look blurrier and out of focus. In a way, the pinhole model is an idealization of the thin lens model with a zero-radius lens.</p>
+
+        <h4 align="middle">Focus Stack: </h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.26_b0.25.png" width="480px" />
+                        <figcaption align="middle">Depth = 4.26 </figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.6_b0.25.png" width="480px" />
+                        <figcaption align="middle">Depth = 4.6 </figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.97_b0.25.png" width="480px" />
+                        <figcaption align="middle">Depth = 4.97 </figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_d5.68_b0.25.png" width="480px" />
+                        <figcaption align="middle">Depth = 5.68 </figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>These images were rendered with alpha = 0.05, s = 1024, l = 4, m = 7, b = 0.25. In these images, you can see how the lens model brings different parts of the dragon into and out of focus, depending on how far the modeled lens is from them.</p>
+
+        <h4 align="middle">Aperture Stack: </h4>
+        <div align="center">
+            <table style="width:100%">
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.6_b0.1.png" width="480px" />
+                        <figcaption align="middle">Aperture Size = 0.1</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.6_b0.5.png" width="480px" />
+                        <figcaption align="middle">Aperture Size = 0.5</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.6_b2.0.png" width="480px" />
+                        <figcaption align="middle">Aperture Size = 2.0</figcaption>
+                    </td>
+                    <td align="middle">
+                        <img src="images/CBdragon_d4.6_b5.0.png" width="480px" />
+                        <figcaption align="middle">Aperture Size = 5.0</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <p>These images were rendered with alpha = 0.05, s = 1024, l = 4, m = 7, and d = 4.6. In these images, you can see how aperture (lens) size can cause too many rays of light to be captured at the observation point, causing blurring, distortion, and even doubling of objects if the lens is too large.</p>
+
+        <p>Site Link: <a href="https://cal-cs184-student.github.io/sp22-project-webpages-rasterfarians/proj3-2/index.html">https://cal-cs184-student.github.io/sp22-project-webpages-rasterfarians/proj3-2/index.html</a></p>
+</div>
+</body>
 </html>
+
+
+
+
